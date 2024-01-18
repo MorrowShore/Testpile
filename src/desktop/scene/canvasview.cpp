@@ -57,6 +57,7 @@ CanvasView::CanvasView(QWidget *parent)
 	, m_enableTablet(true)
 	, m_lock{Lock::None}
 	, m_busy(false)
+	, m_saveInProgress(false)
 	, m_pointertracking(false)
 	, m_pixelgrid(true)
 	, m_enableTouchScroll(true)
@@ -195,14 +196,15 @@ void CanvasView::setRenderUpdateFull(bool updateFull)
 	}
 }
 
-void CanvasView::showDisconnectedWarning(const QString &message)
+void CanvasView::showDisconnectedWarning(
+	const QString &message, bool singleSession)
 {
 	if(m_notificationBarState != NotificationBarState::Reconnect) {
 		dismissNotificationBar();
 		m_notificationBarState = NotificationBarState::Reconnect;
 		m_notificationBar->show(
 			message, QIcon::fromTheme("view-refresh"), tr("Reconnect"),
-			NotificationBar::RoleColor::Warning);
+			NotificationBar::RoleColor::Warning, !singleSession);
 		m_notificationBar->setActionButtonEnabled(true);
 	}
 }
@@ -278,14 +280,24 @@ void CanvasView::dismissNotificationBar()
 
 void CanvasView::setSaveInProgress(bool saveInProgress)
 {
+	m_saveInProgress = saveInProgress;
 	m_notificationBar->setActionButtonEnabled(
 		m_notificationBarState != NotificationBarState::Reset ||
 		!saveInProgress);
+	updateLockNotice();
 }
 
-QString CanvasView::lockDescription() const
+QString CanvasView::lockDescription(bool includeSaveInProgress) const
 {
 	QStringList reasons;
+
+	if(includeSaveInProgress && m_saveInProgress) {
+#ifdef __EMSCRIPTEN__
+		reasons.append(tr("Downloading…"));
+#else
+		reasons.append(tr("Saving…"));
+#endif
+	}
 
 	if(m_lock.testFlag(Lock::Reset)) {
 		reasons.append(tr("Reset in progress"));
@@ -1094,7 +1106,7 @@ void CanvasView::mousePressEvent(QMouseEvent *event)
 
 	penPressEvent(
 		event, QDateTime::currentMSecsSinceEpoch(), mousePos, 1.0, 0.0, 0.0,
-		0.0, event->button(), event->modifiers(), false, false);
+		0.0, event->button(), getMouseModifiers(event), false, false);
 }
 
 void CanvasView::penMoveEvent(
@@ -1170,7 +1182,7 @@ void CanvasView::mouseMoveEvent(QMouseEvent *event)
 
 	penMoveEvent(
 		QDateTime::currentMSecsSinceEpoch(), mousePos, 1.0, 0.0, 0.0, 0.0,
-		event->buttons(), event->modifiers());
+		event->buttons(), getMouseModifiers(event));
 }
 
 void CanvasView::penReleaseEvent(
@@ -1374,9 +1386,10 @@ void CanvasView::mouseReleaseEvent(QMouseEvent *event)
 	if((m_enableTablet && isSynthetic(event)) || m_touching) {
 		return;
 	}
+
 	penReleaseEvent(
 		QDateTime::currentMSecsSinceEpoch(), mousePos, event->button(),
-		event->modifiers());
+		getMouseModifiers(event));
 }
 
 void CanvasView::mouseDoubleClickEvent(QMouseEvent *)
@@ -1393,7 +1406,7 @@ void CanvasView::wheelEvent(QWheelEvent *event)
 		unsigned(event->modifiers()), m_pendown, m_touching);
 
 	CanvasShortcuts::Match match =
-		m_canvasShortcuts.matchMouseWheel(event->modifiers(), m_keysDown);
+		m_canvasShortcuts.matchMouseWheel(geWheelModifiers(event), m_keysDown);
 	int deltaX = angleDelta.x();
 	int deltaY = angleDelta.y();
 	if(match.inverted()) {
@@ -1475,7 +1488,7 @@ void CanvasView::keyPressEvent(QKeyEvent *event)
 		// There's currently some dragging with a mouse button held down going
 		// on. Switch to a different flavor of drag if appropriate and bail out.
 		CanvasShortcuts::Match mouseMatch = m_canvasShortcuts.matchMouseButton(
-			event->modifiers(), m_keysDown, m_dragButton);
+			getKeyboardModifiers(event), m_keysDown, m_dragButton);
 		switch(mouseMatch.action()) {
 		case CanvasShortcuts::CANVAS_PAN:
 		case CanvasShortcuts::CANVAS_ROTATE:
@@ -1497,7 +1510,7 @@ void CanvasView::keyPressEvent(QKeyEvent *event)
 
 	if(m_pendown == NOTDOWN) {
 		CanvasShortcuts::Match keyMatch = m_canvasShortcuts.matchKeyCombination(
-			event->modifiers(), Qt::Key(event->key()));
+			getKeyboardModifiers(event), Qt::Key(event->key()));
 		switch(keyMatch.action()) {
 		case CanvasShortcuts::CANVAS_PAN:
 		case CanvasShortcuts::CANVAS_ROTATE:
@@ -1525,7 +1538,7 @@ void CanvasView::keyPressEvent(QKeyEvent *event)
 
 	if(m_pendown == NOTDOWN) {
 		CanvasShortcuts::Match mouseMatch = m_canvasShortcuts.matchMouseButton(
-			event->modifiers(), m_keysDown, Qt::LeftButton);
+			getKeyboardModifiers(event), m_keysDown, Qt::LeftButton);
 		switch(mouseMatch.action()) {
 		case CanvasShortcuts::TOOL_ADJUST:
 			if(!m_allowToolAdjust) {
@@ -1598,7 +1611,7 @@ void CanvasView::keyReleaseEvent(QKeyEvent *event)
 
 	if(wasDragging && m_dragButton != Qt::NoButton) {
 		CanvasShortcuts::Match mouseMatch = m_canvasShortcuts.matchMouseButton(
-			event->modifiers(), m_keysDown, m_dragButton);
+			getKeyboardModifiers(event), m_keysDown, m_dragButton);
 		switch(mouseMatch.action()) {
 		case CanvasShortcuts::CANVAS_PAN:
 		case CanvasShortcuts::CANVAS_ROTATE:
@@ -1621,7 +1634,7 @@ void CanvasView::keyReleaseEvent(QKeyEvent *event)
 	}
 
 	CanvasShortcuts::Match mouseMatch = m_canvasShortcuts.matchMouseButton(
-		event->modifiers(), m_keysDown, Qt::LeftButton);
+		getKeyboardModifiers(event), m_keysDown, Qt::LeftButton);
 	if(m_dragmode == ViewDragMode::Prepared) {
 		switch(mouseMatch.action()) {
 		case CanvasShortcuts::TOOL_ADJUST:
@@ -2031,7 +2044,7 @@ bool CanvasView::viewportEvent(QEvent *event)
 		}
 		penReleaseEvent(
 			QDateTime::currentMSecsSinceEpoch(), tabPos, tabev->button(),
-			tabev->modifiers());
+			modifiers);
 	} else {
 		return QGraphicsView::viewportEvent(event);
 	}
@@ -2429,8 +2442,8 @@ void CanvasView::showTransformNotice(const QString &text)
 void CanvasView::updateLockNotice()
 {
 	if(m_scene) {
-		if(m_lock) {
-			m_scene->showLockNotice(lockDescription());
+		if(m_lock || m_saveInProgress) {
+			m_scene->showLockNotice(lockDescription(true));
 		} else {
 			m_scene->hideLockNotice();
 		}
@@ -2438,20 +2451,62 @@ void CanvasView::updateLockNotice()
 }
 
 Qt::KeyboardModifiers
+CanvasView::getKeyboardModifiers(const QKeyEvent *keyev) const
+{
+#ifdef __EMSCRIPTEN__
+	// Modifiers reported on Emscripten are just complete garbage.
+	Q_UNUSED(keyev);
+	return getFallbackModifiers();
+#else
+	return keyev->modifiers();
+#endif
+}
+
+Qt::KeyboardModifiers
+CanvasView::getMouseModifiers(const QMouseEvent *mouseev) const
+{
+#ifdef __EMSCRIPTEN__
+	// Modifiers reported on Emscripten are just complete garbage.
+	Q_UNUSED(mouseev);
+	return getFallbackModifiers();
+#else
+	return mouseev->modifiers();
+#endif
+}
+
+Qt::KeyboardModifiers
 CanvasView::getTabletModifiers(const QTabletEvent *tabev) const
 {
-#ifdef Q_OS_ANDROID
+#if defined(Q_OS_ANDROID) || defined(__EMSCRIPTEN__)
 	// Qt always reports no modifiers on Android.
+	// Modifiers reported on Emscripten are just complete garbage.
 	Q_UNUSED(tabev);
+	return getFallbackModifiers();
+#else
+	return tabev->modifiers();
+#endif
+}
+
+Qt::KeyboardModifiers
+CanvasView::geWheelModifiers(const QWheelEvent *wheelev) const
+{
+#ifdef __EMSCRIPTEN__
+	// Modifiers reported on Emscripten are just complete garbage.
+	Q_UNUSED(wheelev);
+	return getFallbackModifiers();
+#else
+	return wheelev->modifiers();
+#endif
+}
+
+Qt::KeyboardModifiers CanvasView::getFallbackModifiers() const
+{
 	Qt::KeyboardModifiers mods;
 	mods.setFlag(Qt::ControlModifier, m_keysDown.contains(Qt::Key_Control));
 	mods.setFlag(Qt::ShiftModifier, m_keysDown.contains(Qt::Key_Shift));
 	mods.setFlag(Qt::AltModifier, m_keysDown.contains(Qt::Key_Alt));
 	mods.setFlag(Qt::MetaModifier, m_keysDown.contains(Qt::Key_Meta));
 	return mods;
-#else
-	return tabev->modifiers();
-#endif
 }
 
 }

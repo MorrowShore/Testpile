@@ -1,4 +1,7 @@
 find_package(${QT_PACKAGE_NAME} REQUIRED COMPONENTS Gui Sql Svg Widgets Multimedia)
+if(QT_VERSION VERSION_GREATER_EQUAL 6)
+	find_package(${QT_PACKAGE_NAME} REQUIRED COMPONENTS OpenGLWidgets)
+endif()
 find_package(QtColorWidgets QUIET)
 find_package(${QT_PACKAGE_NAME}Keychain QUIET)
 
@@ -292,6 +295,12 @@ target_sources(drawpile PRIVATE
 	utils/recents.h
 	utils/widgetutils.cpp
 	utils/widgetutils.h
+	view/canvasview.h
+	view/canvasview.cpp
+	view/canvas/controller.cpp
+	view/canvas/controller.h
+	view/canvas/gl.cpp
+	view/canvas/gl.h
 	widgets/brushpreview.cpp
 	widgets/brushpreview.h
 	widgets/canvasshortcutedit.cpp
@@ -372,6 +381,10 @@ target_link_libraries(drawpile PRIVATE
 	${QT_PACKAGE_NAME}::Widgets
 	${QT_PACKAGE_NAME}::Multimedia
 )
+
+if(QT_VERSION VERSION_GREATER_EQUAL 6)
+	target_link_libraries(drawpile PRIVATE ${QT_PACKAGE_NAME}::OpenGLWidgets)
+endif()
 
 if(WIN32)
 	target_sources(drawpile PRIVATE

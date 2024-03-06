@@ -482,17 +482,14 @@ void CanvasModel::pasteFromImage(
 	setSelection(paste);
 }
 
-void CanvasModel::onCanvasResize(int xoffset, int yoffset, const QSize &oldsize)
+void CanvasModel::onCanvasResize(const QSize &newSize, const QPoint &offset)
 {
-	Q_UNUSED(oldsize);
+	Q_UNUSED(newSize);
 
 	// Adjust selection when new space was added to the left or top side
 	// so it remains visually in the same place
-	if(m_selection) {
-		if(xoffset || yoffset) {
-			QPoint offset(xoffset, yoffset);
-			m_selection->translate(offset);
-		}
+	if(m_selection && !offset.isNull()) {
+		m_selection->translate(offset);
 	}
 }
 

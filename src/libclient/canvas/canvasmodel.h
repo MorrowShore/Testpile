@@ -159,7 +159,7 @@ signals:
 	void compatibilityModeChanged(bool compatibilityMode);
 
 private slots:
-	void onCanvasResize(int xoffset, int yoffset, const QSize &oldsize);
+	void onCanvasResize(const QSize &newSize, const QPoint &offset);
 	void onLaserTrail(uint8_t userId, int persistence, uint32_t color);
 
 private:

@@ -36,7 +36,6 @@ class MainActions;
 class ActionBuilder;
 
 namespace widgets {
-	class CanvasView;
 	class DualColorButton;
 	class NetStatus;
 	class ChatBox;
@@ -79,6 +78,9 @@ namespace desktop {
 namespace settings {
 class Settings;
 }
+}
+namespace view {
+class CanvasView;
 }
 
 class ShortcutDetector;
@@ -335,7 +337,7 @@ private:
 	widgets::ChatBox *m_chatbox;
 	widgets::DualColorButton *m_dualColorButton;
 
-	widgets::CanvasView *m_view;
+	view::CanvasView *m_canvasView;
 
 	widgets::ViewStatusBar *m_viewStatusBar;
 	QLabel *m_lockstatus;

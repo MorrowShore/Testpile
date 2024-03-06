@@ -292,9 +292,10 @@ void CanvasScene::showAnnotationBorders(bool showBorders)
 }
 
 void CanvasScene::handleCanvasResize(
-	int xoffset, int yoffset, const QSize &oldsize)
+	const QSize newSize, const QPoint &offset, const QSize &oldSize)
 {
-	emit canvasResized(xoffset, yoffset, oldsize);
+	Q_UNUSED(newSize);
+	emit canvasResized(offset.x(), offset.y(), oldSize);
 }
 
 AnnotationItem *CanvasScene::getAnnotationItem(int id)

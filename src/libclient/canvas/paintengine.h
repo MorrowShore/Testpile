@@ -4,6 +4,7 @@
 extern "C" {
 #include <dpengine/draw_context.h>
 }
+#include "libclient/canvas/tilecache.h"
 #include "libclient/drawdance/aclstate.h"
 #include "libclient/drawdance/canvashistory.h"
 #include "libclient/drawdance/canvasstate.h"
@@ -57,6 +58,8 @@ public:
 
 	// Renders the whole canvas and returns it as an image. A slow operation!
 	QImage renderPixmap();
+
+	void withTileCache(std::function<void(const TileCache &)> fn) const;
 
 	void setCanvasViewArea(const QRect &area);
 
@@ -230,8 +233,10 @@ public:
 	void clearDabsPreview();
 
 signals:
+	void tileChanged(int tileX, int tileY);
 	void areaChanged(const QRect &area);
-	void resized(int xoffset, int yoffset, const QSize &oldSize);
+	void
+	resized(const QSize &newSize, const QPoint &offset, const QSize &oldSize);
 	void layersChanged(
 		const drawdance::LayerPropsList &lpl, const QSet<int> &revealedLayers);
 	void annotationsChanged(const drawdance::AnnotationList &al);
@@ -308,6 +313,8 @@ private:
 	QPixmap m_cache;
 	QPainter m_painter;
 	DP_Mutex *m_cacheMutex;
+	TileCache m_tileCache;
+	DP_Mutex *m_tileCacheMutex;
 	DP_Semaphore *m_viewSem;
 	QRect m_canvasViewTileArea;
 	bool m_renderOutsideView = false;

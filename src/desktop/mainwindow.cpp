@@ -46,7 +46,8 @@ static constexpr auto CTRL_KEY = Qt::CTRL;
 #include "desktop/tabletinput.h"
 
 #include "libclient/canvas/canvasmodel.h"
-#include "desktop/scene/canvasview.h"
+#include "desktop/view/canvasview.h"
+#include "desktop/view/canvas/controller.h"
 #include "desktop/scene/canvasscene.h"
 #include "desktop/scene/selectionitem.h"
 #include "libclient/canvas/userlist.h"
@@ -153,7 +154,7 @@ MainWindow::MainWindow(bool restoreWindowPosition, bool singleSession)
 	  m_dockOnionSkins(nullptr),
 	  m_dockTimeline(nullptr),
 	  m_chatbox(nullptr),
-	  m_view(nullptr),
+	  m_canvasView(nullptr),
 	  m_viewStatusBar(nullptr),
 	  m_lockstatus(nullptr),
 	  m_netstatus(nullptr),
@@ -245,8 +246,8 @@ MainWindow::MainWindow(bool restoreWindowPosition, bool singleSession)
 	int SPLITTER_WIDGET_IDX = 0;
 
 	// Create canvas view (first splitter item)
-	m_view = new widgets::CanvasView(this);
-	m_splitter->addWidget(m_view);
+	m_canvasView = new view::CanvasView(this);
+	m_splitter->addWidget(m_canvasView);
 	m_splitter->setCollapsible(SPLITTER_WIDGET_IDX++, false);
 
 	// Create the chatbox
@@ -270,10 +271,12 @@ MainWindow::MainWindow(bool restoreWindowPosition, bool singleSession)
 	m_canvasscene->setBackgroundBrush(
 			palette().brush(QPalette::Active,QPalette::Window));
 	m_canvasscene->showToggleItems(dpApp().smallScreenMode());
-	m_view->setCanvas(m_canvasscene);
-	connect(
-		m_view, &widgets::CanvasView::coordinatesChanged, m_viewStatusBar,
-		&widgets::ViewStatusBar::setCoordinates);
+	//- m_view->setCanvas(m_canvasscene);
+
+	view::CanvasController *cc = m_canvasView->controller();
+	//- connect(
+	//- 	m_view, &widgets::CanvasView::coordinatesChanged, m_viewStatusBar,
+	//- 	&widgets::ViewStatusBar::setCoordinates);
 
 	// Create docks
 	createDocks();
@@ -315,16 +318,17 @@ MainWindow::MainWindow(bool restoreWindowPosition, bool singleSession)
 	// Tool dock connections
 	m_tempToolSwitchShortcut = new ShortcutDetector(this);
 
+	//- connect(
+	//- 	m_dockToolSettings->brushSettings(),
+	//- 	&tools::BrushSettings::blendModeChanged, m_view,
+	//- 	&widgets::CanvasView::setBrushBlendMode);
+	//- connect(m_dockToolSettings->laserPointerSettings(), &tools::LaserPointerSettings::pointerTrackingToggled,
+	//- 	m_view, &widgets::CanvasView::setPointerTracking);
 	connect(
-		m_dockToolSettings->brushSettings(),
-		&tools::BrushSettings::blendModeChanged, m_view,
-		&widgets::CanvasView::setBrushBlendMode);
-	connect(m_dockToolSettings->laserPointerSettings(), &tools::LaserPointerSettings::pointerTrackingToggled,
-		m_view, &widgets::CanvasView::setPointerTracking);
-	connect(m_dockToolSettings->zoomSettings(), &tools::ZoomSettings::resetZoom,
-		this, [this]() { m_view->setZoom(1.0); });
+		m_dockToolSettings->zoomSettings(), &tools::ZoomSettings::resetZoom,
+		cc, &view::CanvasController::resetZoom);
 	connect(m_dockToolSettings->zoomSettings(), &tools::ZoomSettings::fitToWindow,
-		m_view, &widgets::CanvasView::zoomToFit);
+		cc, &view::CanvasController::zoomToFit);
 
 	connect(m_dockToolSettings->brushSettings(), &tools::BrushSettings::brushSettingsDialogRequested,
 		this, &MainWindow::showBrushSettingsDialog);
@@ -332,18 +336,28 @@ MainWindow::MainWindow(bool restoreWindowPosition, bool singleSession)
 	connect(m_dockLayers, &docks::LayerList::layerSelected, this, &MainWindow::updateLockWidget);
 	connect(m_dockLayers, &docks::LayerList::activeLayerVisibilityChanged, this, &MainWindow::updateLockWidget);
 
-	connect(m_dockToolSettings, &docks::ToolSettings::sizeChanged, m_view, &widgets::CanvasView::setOutlineSize);
-	connect(m_dockToolSettings, &docks::ToolSettings::subpixelModeChanged, m_view, &widgets::CanvasView::setOutlineMode);
-	connect(m_view, &widgets::CanvasView::colorDropped, m_dockToolSettings, &docks::ToolSettings::setForegroundColor);
-	connect(m_view, SIGNAL(imageDropped(QImage)), this, SLOT(pasteImage(QImage)));
-	connect(m_view, &widgets::CanvasView::urlDropped, this, &MainWindow::dropUrl);
-	connect(m_view, &widgets::CanvasView::viewTransformed, m_viewstatus, &widgets::ViewStatus::setTransformation);
-	connect(m_view, &widgets::CanvasView::viewTransformed, m_dockNavigator, &docks::Navigator::setViewTransformation);
-	connect(m_view, &widgets::CanvasView::toggleActionActivated, this, &MainWindow::handleToggleAction);
+	//- connect(m_dockToolSettings, &docks::ToolSettings::sizeChanged, m_view, &widgets::CanvasView::setOutlineSize);
+	//- connect(m_dockToolSettings, &docks::ToolSettings::subpixelModeChanged, m_view, &widgets::CanvasView::setOutlineMode);
+	//- connect(m_view, &widgets::CanvasView::colorDropped, m_dockToolSettings, &docks::ToolSettings::setForegroundColor);
+	//- connect(m_view, SIGNAL(imageDropped(QImage)), this, SLOT(pasteImage(QImage)));
+	//- connect(m_view, &widgets::CanvasView::urlDropped, this, &MainWindow::dropUrl);
+	connect(
+		cc, &view::CanvasController::transformChanged, m_viewstatus,
+		&widgets::ViewStatus::setTransformation);
+	connect(
+		cc, &view::CanvasController::transformChanged, m_dockNavigator,
+		&docks::Navigator::setViewTransformation);
+	//- connect(m_view, &widgets::CanvasView::toggleActionActivated, this, &MainWindow::handleToggleAction);
 
-	connect(m_viewstatus, &widgets::ViewStatus::zoomChanged, m_view, &widgets::CanvasView::setZoom);
-	connect(m_viewstatus, &widgets::ViewStatus::angleChanged, m_view, &widgets::CanvasView::setRotation);
-	connect(m_dockNavigator, &docks::Navigator::zoomChanged, m_view, &widgets::CanvasView::setZoom);
+	connect(
+		m_viewstatus, &widgets::ViewStatus::zoomChanged, cc,
+		&view::CanvasController::setZoom);
+	connect(
+		m_viewstatus, &widgets::ViewStatus::angleChanged, cc,
+		&view::CanvasController::setRotation);
+	connect(
+		m_dockNavigator, &docks::Navigator::zoomChanged, cc,
+		&view::CanvasController::setZoom);
 
 	connect(m_dockToolSettings, &docks::ToolSettings::toolChanged, this, &MainWindow::toolChanged);
 	connect(m_dockToolSettings, &docks::ToolSettings::activeBrushChanged, this, &MainWindow::updateLockWidget);
@@ -380,16 +394,20 @@ MainWindow::MainWindow(bool restoreWindowPosition, bool singleSession)
 		m_dockToolSettings, &docks::ToolSettings::resetColors);
 
 	// Canvas view -> canvas item, so that the item knows what are to re-render.
-	connect(m_view, &widgets::CanvasView::viewRectChange, m_canvasscene, &drawingboard::CanvasScene::canvasViewportChanged);
+	//- connect(m_view, &widgets::CanvasView::viewRectChange, m_canvasscene, &drawingboard::CanvasScene::canvasViewportChanged);
 
 	// Navigator <-> View
-	connect(m_dockNavigator, &docks::Navigator::focusMoved, m_view, &widgets::CanvasView::scrollTo);
-	connect(m_view, &widgets::CanvasView::viewRectChange, m_dockNavigator, &docks::Navigator::setViewFocus);
-	connect(m_dockNavigator, &docks::Navigator::wheelZoom, m_view, &widgets::CanvasView::zoomSteps);
+	connect(
+		m_dockNavigator, &docks::Navigator::focusMoved, cc,
+		&view::CanvasController::scrollTo);
+	//- connect(m_view, &widgets::CanvasView::viewRectChange, m_dockNavigator, &docks::Navigator::setViewFocus);
+	connect(
+		m_dockNavigator, &docks::Navigator::wheelZoom, cc,
+		&view::CanvasController::zoomSteps);
 
 
 	// Network client <-> UI connections
-	connect(m_view, &widgets::CanvasView::pointerMoved, m_doc, &Document::sendPointerMove);
+	//- connect(m_view, &widgets::CanvasView::pointerMoved, m_doc, &Document::sendPointerMove);
 
 	connect(m_doc, &Document::catchupProgress, this, &MainWindow::updateCatchupProgress);
 	connect(m_doc, &Document::catchupProgress, m_netstatus, &widgets::NetStatus::setCatchupProgress);
@@ -423,9 +441,9 @@ MainWindow::MainWindow(bool restoreWindowPosition, bool singleSession)
 	connect(m_doc->toolCtrl(), &tools::ToolController::activeAnnotationChanged, this, &MainWindow::activeAnnotationChanged);
 	connect(m_doc->toolCtrl(), &tools::ToolController::colorUsed, m_dockToolSettings, &docks::ToolSettings::addLastUsedColor);
 	connect(m_doc->toolCtrl(), &tools::ToolController::actionCancelled, m_dockToolSettings->colorPickerSettings(), &tools::ColorPickerSettings::cancelPickFromScreen);
-	connect(m_doc->toolCtrl(), &tools::ToolController::zoomRequested, m_view, &widgets::CanvasView::zoomTo);
+	//- connect(m_doc->toolCtrl(), &tools::ToolController::zoomRequested, m_view, &widgets::CanvasView::zoomTo);
 	connect(m_doc->toolCtrl(), &tools::ToolController::busyStateChanged, this, [this](bool busy) {
-		m_view->setBusy(busy);
+		//- m_view->setBusy(busy);
 		setDrawingToolsEnabled(!busy);
 	});
 
@@ -434,19 +452,19 @@ MainWindow::MainWindow(bool restoreWindowPosition, bool singleSession)
 			m_doc->toolCtrl()->setActiveAnnotation(0);
 	});
 
-	connect(m_doc->toolCtrl(), &tools::ToolController::toolCursorChanged, m_view, &widgets::CanvasView::setToolCursor);
-	m_view->setToolCursor(m_doc->toolCtrl()->activeToolCursor());
-	connect(m_doc->toolCtrl(), &tools::ToolController::toolCapabilitiesChanged, m_view, &widgets::CanvasView::setToolCapabilities);
-	m_view->setToolCapabilities(
-		m_doc->toolCtrl()->activeToolAllowColorPick(),
-		m_doc->toolCtrl()->activeToolAllowToolAdjust(),
-		m_doc->toolCtrl()->activeToolHandlesRightClick());
+	//- connect(m_doc->toolCtrl(), &tools::ToolController::toolCursorChanged, m_view, &widgets::CanvasView::setToolCursor);
+	//- m_view->setToolCursor(m_doc->toolCtrl()->activeToolCursor());
+	//- connect(m_doc->toolCtrl(), &tools::ToolController::toolCapabilitiesChanged, m_view, &widgets::CanvasView::setToolCapabilities);
+	//- m_view->setToolCapabilities(
+	//- 	m_doc->toolCtrl()->activeToolAllowColorPick(),
+	//- 	m_doc->toolCtrl()->activeToolAllowToolAdjust(),
+	//- 	m_doc->toolCtrl()->activeToolHandlesRightClick());
 
-	connect(m_view, &widgets::CanvasView::penDown, m_doc->toolCtrl(), &tools::ToolController::startDrawing);
-	connect(m_view, &widgets::CanvasView::penMove, m_doc->toolCtrl(), &tools::ToolController::continueDrawing);
-	connect(m_view, &widgets::CanvasView::penHover, m_doc->toolCtrl(), &tools::ToolController::hoverDrawing);
-	connect(m_view, &widgets::CanvasView::penUp, m_doc->toolCtrl(), &tools::ToolController::endDrawing);
-	connect(m_view, &widgets::CanvasView::quickAdjust, m_dockToolSettings, &docks::ToolSettings::quickAdjustCurrent1);
+	//- connect(m_view, &widgets::CanvasView::penDown, m_doc->toolCtrl(), &tools::ToolController::startDrawing);
+	//- connect(m_view, &widgets::CanvasView::penMove, m_doc->toolCtrl(), &tools::ToolController::continueDrawing);
+	//- connect(m_view, &widgets::CanvasView::penHover, m_doc->toolCtrl(), &tools::ToolController::hoverDrawing);
+	//- connect(m_view, &widgets::CanvasView::penUp, m_doc->toolCtrl(), &tools::ToolController::endDrawing);
+	//- connect(m_view, &widgets::CanvasView::quickAdjust, m_dockToolSettings, &docks::ToolSettings::quickAdjustCurrent1);
 
 	connect(m_dockLayers, &docks::LayerList::layerSelected, m_doc->toolCtrl(), &tools::ToolController::setActiveLayer);
 	connect(m_dockLayers, &docks::LayerList::layerSelected, m_dockTimeline, &docks::Timeline::setCurrentLayer);
@@ -465,16 +483,16 @@ MainWindow::MainWindow(bool restoreWindowPosition, bool singleSession)
 
 	connect(m_canvasscene, &drawingboard::CanvasScene::canvasResized, m_doc->toolCtrl(), &tools::ToolController::offsetActiveTool);
 
-	connect(m_view, &widgets::CanvasView::reconnectRequested, this, [this]() {
-		joinSession(m_doc->client()->sessionUrl(true));
-		m_view->hideDisconnectedWarning();
-	});
-	connect(
-		m_view, &widgets::CanvasView::savePreResetStateRequested, this,
-		&MainWindow::savePreResetImageAs);
-	connect(
-		m_view, &widgets::CanvasView::savePreResetStateDismissed, this,
-		&MainWindow::discardPreResetImage);
+	//- connect(m_view, &widgets::CanvasView::reconnectRequested, this, [this]() {
+	//- 	joinSession(m_doc->client()->sessionUrl(true));
+	//- 	m_view->hideDisconnectedWarning();
+	//- });
+	//- connect(
+	//- 	m_view, &widgets::CanvasView::savePreResetStateRequested, this,
+	//- 	&MainWindow::savePreResetImageAs);
+	//- connect(
+	//- 	m_view, &widgets::CanvasView::savePreResetStateDismissed, this,
+	//- 	&MainWindow::discardPreResetImage);
 
 	// Network status changes
 	connect(m_doc, &Document::serverConnected, this, &MainWindow::onServerConnected);
@@ -501,7 +519,7 @@ MainWindow::MainWindow(bool restoreWindowPosition, bool singleSession)
 	connect(&dpApp(), &DrawpileApp::setDockTitleBarsHidden, this, &MainWindow::setDockTitleBarsHidden);
 	connect(&dpApp(), &DrawpileApp::focusCanvas, this, [this] {
 		if(dpApp().settings().doubleTapAltToFocusCanvas()) {
-			m_view->setFocus();
+			//- m_view->setFocus();
 		}
 	});
 
@@ -556,7 +574,7 @@ MainWindow::~MainWindow()
 
 	// Clear this out first so there will be no weird signals emitted
 	// while the document is being torn down.
-	m_view->setScene(nullptr);
+	//- m_view->setScene(nullptr);
 	delete m_canvasscene;
 
 	// Make sure all child dialogs are closed
@@ -581,6 +599,9 @@ void MainWindow::autoJoin(const QUrl &url)
 void MainWindow::onCanvasChanged(canvas::CanvasModel *canvas)
 {
 	m_canvasscene->initCanvas(canvas);
+
+	view::CanvasController *cc = m_canvasView->controller();
+	cc->setCanvasModel(canvas);
 
 	connect(canvas->aclState(), &canvas::AclState::localOpChanged, this, &MainWindow::onOperatorModeChange);
 	connect(canvas->aclState(), &canvas::AclState::localLockChanged, this, &MainWindow::updateLockWidget);
@@ -866,8 +887,8 @@ void MainWindow::readSettings(bool windowpos)
 
 	settings.bindTabletEraserAction(this, [=](int action) {
 #ifdef __EMSCRIPTEN__
-		m_view->setEnableEraserOverride(
-			action == int(tabletinput::EraserAction::Override));
+		//- m_view->setEnableEraserOverride(
+		//- 	action == int(tabletinput::EraserAction::Override));
 #else
 		if(action == int(tabletinput::EraserAction::Switch)) {
 			connect(
@@ -1166,11 +1187,11 @@ void MainWindow::sendUserInfo(int userId)
 		{"qt_version", QString::number(QT_VERSION_MAJOR)},
 		{"os", os},
 		{"tablet_input", tabletinput::current()},
-		{"tablet_mode", m_view->isTabletEnabled() ? "pressure" : "none"},
-		{"touch_mode", m_view->isTouchDrawEnabled() ? "draw"
-			: m_view->isTouchScrollEnabled() ? "scroll" : "none"},
+		//- {"tablet_mode", m_view->isTabletEnabled() ? "pressure" : "none"},
+		//- {"touch_mode", m_view->isTouchDrawEnabled() ? "draw"
+		//- 	: m_view->isTouchScrollEnabled() ? "scroll" : "none"},
 		{"smoothing", m_doc->toolCtrl()->globalSmoothing()},
-		{"pressure_curve", m_view->pressureCurve().toString()},
+		//- {"pressure_curve", m_view->pressureCurve().toString()},
 	};
 	net::Client *client = m_doc->client();
 	client->sendMessage(net::makeUserInfoMessage(
@@ -1690,7 +1711,7 @@ void MainWindow::onCanvasSaveStarted()
 	getAction("exportdocument")->setEnabled(false);
 #endif
 	m_viewStatusBar->showMessage(tr("Saving..."));
-	m_view->setSaveInProgress(true);
+	//- m_view->setSaveInProgress(true);
 }
 
 void MainWindow::onCanvasSaved(const QString &errorMessage)
@@ -1704,7 +1725,7 @@ void MainWindow::onCanvasSaved(const QString &errorMessage)
 	getAction("savedocumentas")->setEnabled(true);
 	getAction("exportdocument")->setEnabled(true);
 #endif
-	m_view->setSaveInProgress(false);
+	//- m_view->setSaveInProgress(false);
 
 	setWindowModified(m_doc->isDirty());
 	updateTitle();
@@ -1755,8 +1776,8 @@ void MainWindow::onCanvasDownloadError(const QString &errorMessage)
 void MainWindow::showResetNoticeDialog(const drawdance::CanvasState &canvasState)
 {
 	m_canvasscene->setCatchupProgress(0);
-	m_view->showResetNotice(
-		m_doc->isCompatibilityMode(), m_doc->isSaveInProgress());
+	//- m_view->showResetNotice(
+	//- 	m_doc->isCompatibilityMode(), m_doc->isSaveInProgress());
 	if(m_preResetCanvasState.isNull()) {
 		m_preResetCanvasState = canvasState;
 	}
@@ -1777,18 +1798,18 @@ void MainWindow::updateCatchupProgress(int percent)
 void MainWindow::savePreResetImageAs()
 {
 	if(m_preResetCanvasState.isNull()) {
-		m_view->hideResetNotice();
+		//- m_view->hideResetNotice();
 	} else {
 #ifdef __EMSCRIPTEN__
 		if(FileWrangler(this).downloadPreResetImage(m_doc, m_preResetCanvasState)) {
-			m_view->hideResetNotice();
+			//- m_view->hideResetNotice();
 		}
 #else
 		QString result = FileWrangler(this).savePreResetImageAs(
 			m_doc, m_preResetCanvasState);
 		if(!result.isEmpty()) {
 			m_preResetCanvasState = drawdance::CanvasState::null();
-			m_view->hideResetNotice();
+			//- m_view->hideResetNotice();
 			addRecentFile(result);
 		}
 #endif
@@ -1798,7 +1819,7 @@ void MainWindow::savePreResetImageAs()
 void MainWindow::discardPreResetImage()
 {
 	m_preResetCanvasState = drawdance::CanvasState::null();
-	m_view->hideResetNotice();
+	//- m_view->hideResetNotice();
 }
 
 void MainWindow::showCompatibilityModeWarning()
@@ -2386,7 +2407,7 @@ void MainWindow::terminateSession()
  */
 void MainWindow::joinSession(const QUrl& url, const QString &autoRecordFile)
 {
-	m_view->hideDisconnectedWarning();
+	//- m_view->hideDisconnectedWarning();
 	if(!canReplace()) {
 		MainWindow *win = new MainWindow(false, m_singleSession);
 		emit windowReplacementFailed(win);
@@ -2428,7 +2449,7 @@ void MainWindow::onServerConnected()
 	}
 
 	// Disable UI until login completes
-	m_view->setEnabled(false);
+	//- m_view->setEnabled(false);
 	setDrawingToolsEnabled(false);
 }
 
@@ -2457,7 +2478,7 @@ void MainWindow::onServerDisconnected(const QString &message, const QString &err
 	m_sessionSettings->close();
 
 	// Re-enable UI
-	m_view->setEnabled(true);
+	//- m_view->setEnabled(true);
 	setDrawingToolsEnabled(true);
 
 	// Display login error if not yet logged in
@@ -2503,7 +2524,7 @@ void MainWindow::onServerDisconnected(const QString &message, const QString &err
 		QString notif = message.isEmpty()
 				? tr("You've been disconnected from the session.")
 				: tr("Disconnected: %1").arg(message);
-		m_view->showDisconnectedWarning(notif, m_singleSession);
+		//- m_view->showDisconnectedWarning(notif, m_singleSession);
 		if(m_lastDisconnectNotificationTimer.hasExpired()) {
 			dpApp().notifications()->trigger(
 				this, notification::Event::Disconnect, notif);
@@ -2530,8 +2551,8 @@ void MainWindow::onServerLogin(bool join, const QString &joinPassword)
 	m_netstatus->setSecurityLevel(
 		client->securityLevel(), client->hostCertificate(),
 		client->isSelfSignedCertificate());
-	m_view->setEnabled(true);
-	m_view->hideDisconnectedWarning();
+	//- m_view->setEnabled(true);
+	//- m_view->hideDisconnectedWarning();
 	m_sessionSettings->setPersistenceEnabled(client->serverSuppotsPersistence());
 	m_sessionSettings->setBanImpExEnabled(
 		client->isModerator(), client->serverSupportsCryptBanImpEx(),
@@ -2596,8 +2617,8 @@ void MainWindow::updateLockWidget()
 		lock.setFlag(Lock::Tool);
 	}
 
-	m_view->setLock(lock);
-	m_lockstatus->setToolTip(m_view->lockDescription(false));
+	//- m_view->setLock(lock);
+	//- m_lockstatus->setToolTip(m_view->lockDescription(false));
 	m_lockstatus->setPixmap(lock ? QIcon::fromTheme("object-locked").pixmap(16, 16) : QPixmap{});
 }
 
@@ -2789,7 +2810,7 @@ void MainWindow::setDocksHidden(bool hidden)
 	m_viewStatusBar->setHidden(hidden);
 
 	QPoint centerPosDelta = centralWidget()->pos() - centerPosBefore;
-	m_view->scrollBy(centerPosDelta.x(), centerPosDelta.y());
+	//- m_view->scrollBy(centerPosDelta.x(), centerPosDelta.y());
 	m_dockToggles->setDisabled(hidden);
 }
 
@@ -2909,9 +2930,9 @@ void MainWindow::toolChanged(tools::Tool::Type tool)
 	m_canvasscene->setShowOwnUserMarker(isLaserPointerSelected);
 
 	// Send pointer updates when using the laser pointer
-	m_view->setPointerTracking(
-		isLaserPointerSelected &&
-		m_dockToolSettings->laserPointerSettings()->pointerTracking());
+	//- m_view->setPointerTracking(
+	//- 	isLaserPointerSelected &&
+	//- 	m_dockToolSettings->laserPointerSettings()->pointerTracking());
 
 	// Remove selection when not using selection tool
 	if(tool != tools::Tool::SELECTION && tool != tools::Tool::POLYGONSELECTION)
@@ -3044,10 +3065,10 @@ void MainWindow::paste()
 		}
 
 		// Paste-in-place if we're the source (same process, same document)
-		if(pasteAtPos && m_view->isPointVisible(pastepos))
-			pasteImage(mimeData->imageData().value<QImage>(), &pastepos, true);
-		else
-			pasteImage(mimeData->imageData().value<QImage>());
+		//- if(pasteAtPos && m_view->isPointVisible(pastepos))
+		//- 	pasteImage(mimeData->imageData().value<QImage>(), &pastepos, true);
+		//- else
+		//- 	pasteImage(mimeData->imageData().value<QImage>());
 	}
 }
 
@@ -3092,7 +3113,7 @@ void MainWindow::pasteImage(const QImage &image, const QPoint *point, bool force
 		m_lastToolBeforePaste = currentTool;
 	}
 
-	m_doc->pasteImage(image, point ? *point : m_view->viewCenterPoint(), force);
+	//- m_doc->pasteImage(image, point ? *point : m_view->viewCenterPoint(), force);
 }
 
 void MainWindow::dropUrl(const QUrl &url)
@@ -4012,29 +4033,44 @@ void MainWindow::setupActions()
 	});
 	connect(m_chatbox, &widgets::ChatBox::muteChanged, this, &MainWindow::setNotificationsMuted);
 
-	connect(moveleft, &QAction::triggered, m_view, [this] {
-		m_view->moveStep(widgets::CanvasView::Direction::Left);
-	});
-	connect(moveright, &QAction::triggered, m_view, [this] {
-		m_view->moveStep(widgets::CanvasView::Direction::Right);
-	});
-	connect(moveup, &QAction::triggered, m_view, [this] {
-		m_view->moveStep(widgets::CanvasView::Direction::Up);
-	});
-	connect(movedown, &QAction::triggered, m_view, [this] {
-		m_view->moveStep(widgets::CanvasView::Direction::Down);
-	});
-	connect(zoomin, &QAction::triggered, m_view, &widgets::CanvasView::zoomin);
-	connect(zoomout, &QAction::triggered, m_view, &widgets::CanvasView::zoomout);
-	connect(zoomorig, &QAction::triggered, this, [this]() { m_view->setZoom(1.0); });
-	connect(zoomfit, &QAction::triggered, m_view, &widgets::CanvasView::zoomToFit);
-	connect(zoomfitwidth, &QAction::triggered, m_view, &widgets::CanvasView::zoomToFitWidth);
-	connect(zoomfitheight, &QAction::triggered, m_view, &widgets::CanvasView::zoomToFitHeight);
-	connect(rotateorig, &QAction::triggered, this, [this]() { m_view->setRotation(0); });
-	connect(rotatecw, &QAction::triggered, this, [this]() { m_view->setRotation(m_view->rotation() + 5); });
-	connect(rotateccw, &QAction::triggered, this, [this]() { m_view->setRotation(m_view->rotation() - 5); });
-	connect(viewflip, SIGNAL(triggered(bool)), m_view, SLOT(setViewFlip(bool)));
-	connect(viewmirror, SIGNAL(triggered(bool)), m_view, SLOT(setViewMirror(bool)));
+	view::CanvasController *cc = m_canvasView->controller();
+	connect(
+		moveleft, &QAction::triggered, cc,
+		&view::CanvasController::scrollStepLeft);
+	connect(
+		moveright, &QAction::triggered, cc,
+		&view::CanvasController::scrollStepRight);
+	connect(
+		moveup, &QAction::triggered, cc, &view::CanvasController::scrollStepUp);
+	connect(
+		movedown, &QAction::triggered, cc,
+		&view::CanvasController::scrollStepDown);
+	connect(zoomin, &QAction::triggered, cc, &view::CanvasController::zoomIn);
+	connect(zoomout, &QAction::triggered, cc, &view::CanvasController::zoomOut);
+	connect(
+		zoomorig, &QAction::triggered, cc, &view::CanvasController::resetZoom);
+	connect(
+		zoomfit, &QAction::triggered, cc, &view::CanvasController::zoomToFit);
+	connect(
+		zoomfitwidth, &QAction::triggered, cc,
+		&view::CanvasController::zoomToFitWidth);
+	connect(
+		zoomfitheight, &QAction::triggered, cc,
+		&view::CanvasController::zoomToFitHeight);
+	connect(
+		rotateorig, &QAction::triggered, cc,
+		&view::CanvasController::resetRotation);
+	connect(
+		rotatecw, &QAction::triggered, cc,
+		&view::CanvasController::rotateStepClockwise);
+	connect(
+		rotateccw, &QAction::triggered, cc,
+		&view::CanvasController::rotateStepCounterClockwise);
+	connect(
+		viewflip, &QAction::triggered, cc, &view::CanvasController::setFlip);
+	connect(
+		viewmirror, &QAction::triggered, cc,
+		&view::CanvasController::setMirror);
 
 #ifndef SINGLE_MAIN_WINDOW
 	connect(fullscreen, &QAction::triggered, this, &MainWindow::toggleFullscreen);
@@ -4046,7 +4082,7 @@ void MainWindow::setupActions()
 	connect(showuserlayers, &QAction::toggled, m_canvasscene, &drawingboard::CanvasScene::showUserLayers);
 	connect(showuseravatars, &QAction::toggled, m_canvasscene, &drawingboard::CanvasScene::showUserAvatars);
 	connect(showlasers, &QAction::toggled, this, &MainWindow::setShowLaserTrails);
-	connect(showgrid, &QAction::toggled, m_view, &widgets::CanvasView::setPixelGrid);
+	//- connect(showgrid, &QAction::toggled, m_view, &widgets::CanvasView::setPixelGrid);
 
 	m_viewstatus->setActions(viewflip, viewmirror, rotateorig, {zoomorig, zoomfit, zoomfitwidth, zoomfitheight});
 
@@ -4630,7 +4666,7 @@ void MainWindow::setupActions()
 
 	QAction *focusCanvas = makeAction("focuscanvas", tr("Focus canvas")).shortcut(CTRL_KEY | Qt::Key_Tab);
 	connect(focusCanvas, &QAction::triggered, this, [this]{
-		m_view->setFocus();
+		m_canvasView->setFocus();
 	});
 
 	const QList<QAction *> globalDockActions = {sideTabDocks, hideDocks, hideDockTitleBars};
@@ -4664,7 +4700,7 @@ void MainWindow::setupActions()
 void MainWindow::createDocks()
 {
 	Q_ASSERT(m_doc);
-	Q_ASSERT(m_view);
+	Q_ASSERT(m_canvasView);
 	Q_ASSERT(m_canvasscene);
 
 	setDockNestingEnabled(true);
@@ -4674,7 +4710,7 @@ void MainWindow::createDocks()
 	m_dockToolSettings->setObjectName("ToolSettings");
 	m_dockToolSettings->setAllowedAreas(Qt::AllDockWidgetAreas);
 	addDockWidget(Qt::LeftDockWidgetArea, m_dockToolSettings);
-	m_dockToolSettings->selectionSettings()->setView(m_view);
+	//- m_dockToolSettings->selectionSettings()->setView(m_view);
 	m_dockToolSettings->annotationSettings()->setScene(m_canvasscene);
 
 	// Create brush palette

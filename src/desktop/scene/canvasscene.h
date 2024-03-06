@@ -142,7 +142,8 @@ signals:
 private slots:
 	void onSelectionChanged(canvas::Selection *sel);
 	void onUserJoined(int id, const QString &name);
-	void handleCanvasResize(int xoffset, int yoffset, const QSize &oldsize);
+	void handleCanvasResize(
+		const QSize newSize, const QPoint &offset, const QSize &oldSize);
 	void advanceAnimations();
 
 	void userCursorMoved(

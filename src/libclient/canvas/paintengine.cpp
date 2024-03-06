@@ -52,6 +52,7 @@ PaintEngine::PaintEngine(
 	, m_updateLayersVisibleInFrame{false}
 {
 	m_cacheMutex = DP_mutex_new();
+	m_tileCacheMutex = DP_mutex_new();
 	m_viewSem = DP_semaphore_new(0);
 	start();
 }
@@ -59,6 +60,7 @@ PaintEngine::PaintEngine(
 PaintEngine::~PaintEngine()
 {
 	DP_semaphore_free(m_viewSem);
+	DP_mutex_free(m_tileCacheMutex);
 	DP_mutex_free(m_cacheMutex);
 }
 
@@ -106,6 +108,9 @@ void PaintEngine::reset(
 	DP_mutex_lock(m_cacheMutex);
 	m_cache = QPixmap{};
 	DP_mutex_unlock(m_cacheMutex);
+	DP_mutex_lock(m_tileCacheMutex);
+	m_tileCache.clear();
+	DP_mutex_unlock(m_tileCacheMutex);
 	m_undoDepthLimit = DP_UNDO_DEPTH_DEFAULT;
 	start();
 	emit aclsChanged(m_acls, DP_ACL_STATE_CHANGE_MASK, true);
@@ -649,8 +654,18 @@ QImage PaintEngine::renderPixmap()
 	return img;
 }
 
+void PaintEngine::withTileCache(std::function<void(const TileCache &)> fn) const
+{
+	DP_mutex_lock(m_tileCacheMutex);
+	fn(m_tileCache);
+	DP_mutex_unlock(m_tileCacheMutex);
+}
+
 void PaintEngine::setCanvasViewArea(const QRect &area)
 {
+	qDebug(
+		"setCanvasViewArea x%d y%d w%d h%d", area.x(), area.y(), area.width(),
+		area.height());
 	// We can't use QPoint::operator/ because that rounds instead of truncates.
 	m_canvasViewTileArea = QRect{
 		QPoint{area.left() / DP_TILE_SIZE, area.top() / DP_TILE_SIZE},
@@ -831,6 +846,12 @@ void PaintEngine::onRenderTile(
 	painter.drawImage(area.x(), area.y(), image);
 	painter.end();
 	DP_mutex_unlock(pe->m_cacheMutex);
+
+	DP_mutex_lock(pe->m_tileCacheMutex);
+	pe->m_tileCache.render(tileX, tileY, pixels);
+	DP_mutex_unlock(pe->m_tileCacheMutex);
+
+	emit pe->tileChanged(tileX, tileY);
 	emit pe->areaChanged(area);
 }
 
@@ -860,7 +881,14 @@ void PaintEngine::onRenderResize(
 		pe->m_cache = std::move(pixmap);
 	}
 	DP_mutex_unlock(pe->m_cacheMutex);
-	emit pe->resized(offsetX, offsetY, QSize{prevWidth, prevHeight});
+
+	DP_mutex_lock(pe->m_tileCacheMutex);
+	pe->m_tileCache.resize(width, height);
+	DP_mutex_unlock(pe->m_tileCacheMutex);
+
+	emit pe->resized(
+		QSize(width, height), QPoint(offsetX, offsetY),
+		QSize(prevWidth, prevHeight));
 }
 
 }
